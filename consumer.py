@@ -67,6 +67,5 @@ class Consumer(Thread):
             # Print products
             if len(cart_list) > 0:
                 for k in cart_list:
-                    self.marketplace.lock_consumer()
-                    print(self.kwargs['name'], 'bought', k[0])
-                    self.marketplace.unlock_consumer()
+                    with self.marketplace.get_lock_consumer():
+                        print(self.kwargs['name'], 'bought', k[0])
