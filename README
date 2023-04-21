@@ -1,0 +1,82 @@
+Name: Drăghici Maria-Ana
+Group: 332CA
+Tema 1
+
+Solution:
+
+    To every producer it is assigned an id(String) and it is saved
+in the marketplace in a dictionary(producers). A producer is constantly
+producing products if he did not reached his products limit.
+Each producer tries to produce the product(publish function), if it can not, sleep
+function is called for republish_wait_time seconds. If the producer
+is allowed to publish the product, it will publish it and then
+wait n seconds, where n is the number of seconds assigned to the
+product just published. Publish function verifies if the producer
+reached his products limit. If he did, then the function returns False.
+Otherwise, the products are saved in a dictionary with a dictionary as value.
+The 'quantity' element is the total quantity of that type
+of product, the 'available' value is the quantity available and
+the 'producers' element is a list with the producers that produced that
+type of product. Once a producer publishes a product, the product
+is added to the dictionary if it did not already exist or the total
+quantity and available quantity are incremented by 1 and
+the producer added to the list of producers.
+Also, the value for the producer_id in the
+producer dictionary is increased by 1 in order to keep track
+of the number of products the producer published.
+    To every consumer is assigned a cart id for every order in carts.
+The consumer adds or remove products from cart, depending on the
+command in carts. When the consumer wants to add a product
+to the cart, the add_to_cart function is called. If it returns
+false, then the consumer waits for retry_wait_time seconds and tries again,
+otherwise the cart is updated. The add_to_cart function verifies if the
+available quantity of the product is greater than 0. If it is not,
+then it returns false. Otherwise, it decreases the available
+quantity and it removes a producer from the list. The products is added
+to the carts[cart_id] which is a list of lists of type [product, producer_id].
+When a consumer want to remove a product from the cart, the remove_from_cart
+function is called. This function searches in the current cart to find the list
+that contains the product. Once found, the available quantity of the product
+is increased, the producer is added to the producers list of the product
+and the list [product, producer] is removed from the cart.
+    After a cart from carts in consumers is iterated, the order is placed.
+The place_order function iterates through every list [product, producer] in
+the cart and for the product, the total quantity is decreased by 1 and for the
+producer, the number of products published is decreased by 1. If the
+cart is empty, then the function returns an empty list. Otherwise it returns
+the cart and the printing is done in the consumer.
+    The implementation uses 4 locks. One for registering the producers
+and one for the new carts in order to avoid race condition for the
+producer_id and cart_id. One lock is used for modifying elements in the
+products dictionary: when a product is published, the quantity changes
+are isolated by a mutex. Also, when a product is added or removed
+from a cart the changes to the products dictionary is also
+made using the same mutex. The last lock is used for the
+printing to be thread-safe. The consumers use a lock to print
+the products so that no over-writing happens.
+    The implementation is time efficient as all the products
+and producers are saved in dictionary so the access time is
+O(1).
+    The unit testing tests every function in marketplace using
+assertEqual for comparing the results and in some cases,
+a message with the problem if the results are different.
+    For the logging, for the functions with parameters, a log
+is made when entering the function, printing the parameters
+and the goal of the function. Before the return of the functions,
+a log is made with the conclusion of the function(what happened
+in the function, the result).
+
+Implementation:
+
+    All the tasks where implemented. The only extra functions
+added in the marketplace are the one for the consumer lock
+as the print function had to pe thread-safe.
+
+Resources:
+
+https://ocw.cs.pub.ro/courses/asc/laboratoare/02
+https://tutorialedge.net/python/python-logging-best-practices/
+https://stackoverflow.com/questions/32402502/how-to-change-the-time-zone-in-python-logging
+
+Git link:
+https://github.com/mariadraghici/Marketplace
