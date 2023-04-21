@@ -11,21 +11,21 @@ from threading import Lock
 import logging
 import logging.handlers as handlers
 
-# create a formatter for the log messages
+# Create a formatter for the log messages
 time_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
 
-# create a rotating file handler for the log file
+# Create a rotating file handler for the log file
 handler = handlers.RotatingFileHandler(filename='./marketplace.log', maxBytes=3000, backupCount=5)
 handler.setFormatter(time_formatter)
 
-# create a logger object and set the logging level
+# Create a logger object and set the logging level
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# add the file handler to the logger
+# Add the file handler to the logger
 logger.addHandler(handler)
 
-# set the converter to use GMT time
+# Set the converter to use GMT time
 logging.Formatter.converter = time.gmtime
 
 
@@ -56,7 +56,9 @@ class Marketplace:
         Returns an id for the producer that calls this.
         """
         with self.lock_register:
+            # Create producer_id
             producer_id = str(len(self.producers))
+            # Initialize number of products published with 0
             self.producers[producer_id] = 0
             logging.info("producer %s was registered", producer_id)
             return producer_id
@@ -74,15 +76,18 @@ class Marketplace:
         :returns True or False. If the caller receives False, it should wait and then try again.
         """
         logging.info("producer %s wants to publish product %s", producer_id, str(product))
+        # Verify if the producer reached limit of products
         if self.producers[producer_id] == self.queue_size_per_producer:
             logging.info("producer could not publish")
             return False
 
+        # Increment number of products published for the producer
         if producer_id not in self.producers:
             self.producers[producer_id] = 1
         else:
             self.producers[producer_id] = self.producers[producer_id] + 1
         self.semaphore.acquire()
+        # Add the product to products
         if product not in self.products:
             self.products[product] = {'quantity': 1, 'available': 1, 'producers': [producer_id]}
             self.semaphore.release()
@@ -100,8 +105,10 @@ class Marketplace:
 
         :returns an int representing the cart_id
         """
+        # Generate cart_id
         with self.lock_carts:
             cart_id = len(self.carts)
+            # Initialize list for cart
             self.carts[cart_id] = []
             logging.info("a new cart with id %d was created", cart_id)
             return cart_id
@@ -121,15 +128,20 @@ class Marketplace:
         logging.info("adding product %s to cart %d", str(product), cart_id)
         self.semaphore.acquire()
         if product in self.products:
+            # If there is still at least one product
             if self.products[product]['available'] >= 1:
+                # Add product to cart
                 self.carts[cart_id].append([product, self.products[product]['producers'][0]])
+                # Decrease by 1 the number of available products of this type
                 self.products[product]['available'] = self.products[product]['available'] - 1
+                # Update the list of producers for this product type
                 self.products[product]['producers'].pop(0)
                 self.semaphore.release()
                 logging.info("product was added to the cart")
                 return True
         self.semaphore.release()
         logging.info("product could not be added to the cart")
+        # If the product has not been produced or is not available return False
         return False
 
     def remove_from_cart(self, cart_id, product):
@@ -146,14 +158,19 @@ class Marketplace:
         self.semaphore.acquire()
         index = -1
         producer_id = 0
+        # Search for the list with that type of product
         for i in range(len(self.carts[cart_id])):
             if product == self.carts[cart_id][i][0]:
+                # Save producer
                 producer_id = self.carts[cart_id][i][1]
+                # Save index
                 index = i
                 break
 
         if index != -1:
+            # Remove product from cart
             self.carts[cart_id].pop(index)
+            # Update available quantity and producers list for that type of product
             self.products[product]['available'] = self.products[product]['available'] + 1
             self.products[product]['producers'].append(producer_id)
         self.semaphore.release()
@@ -167,16 +184,21 @@ class Marketplace:
         :param cart_id: id cart
         """
         logging.info("order from cart %d is being placed", cart_id)
+        # If cart is empty return empty list
         if len(self.carts[cart_id]) == 0:
             return []
+        # Iterate through products in cart
         for i in range(len(self.carts[cart_id])):
             product = self.carts[cart_id][i][0]
             self.semaphore.acquire()
+            # Decrease with 1 total quantity for this type of product
             self.products[product]['quantity'] = self.products[product]['quantity'] - 1
             producer_id = self.carts[cart_id][i][1]
+            # Decrease number of products the producer published
             self.producers[producer_id] = self.producers[producer_id] - 1
             self.semaphore.release()
         logging.info("ordered placed successfully")
+        # Return cart
         return self.carts[cart_id]
 
     def lock_consumer(self):

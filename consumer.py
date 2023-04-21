@@ -40,7 +40,9 @@ class Consumer(Thread):
         self.cart_id = self.marketplace.new_cart()
 
     def run(self):
+        # Iterate through carts
         for i in range(len(self.carts)):
+            # Iterate through commands
             for j in range(len(self.carts[i])):
                 command = self.carts[i][j]['type']
                 product = self.carts[i][j]['product']
@@ -48,17 +50,21 @@ class Consumer(Thread):
                 if command == 'add':
                     while quantity > 0:
                         verify = self.marketplace.add_to_cart(self.cart_id, product)
+                        # If the product can not be added sleep and try again
                         if not verify:
                             sleep(self.retry_wait_time)
                         else:
+                            # If product was added, decrease quantity
                             quantity = quantity - 1
                 if command == 'remove':
                     while quantity > 0:
                         self.marketplace.remove_from_cart(self.cart_id, product)
                         quantity = quantity - 1
-
+            # Save returned list of products
             cart_list = self.marketplace.place_order(self.cart_id)
+            # Assign a new cart
             self.cart_id = self.marketplace.new_cart()
+            # Print products
             if len(cart_list) > 0:
                 for k in cart_list:
                     self.marketplace.lock_consumer()

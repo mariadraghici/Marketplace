@@ -40,29 +40,16 @@ class Producer(Thread):
         self.id = marketplace.register_producer()
 
     def run(self):
-        # print('sunt aici')
         i = 0
-        curr_time = 0
         wait_time = self.products[i][2]
         quantity = self.products[i][1]
         while 1:
-            # print(curr_time, wait_time, i)
             verify = self.marketplace.publish(self.id, self.products[i][0])
             if not verify:
-                # print('ma culc republish')
+                # If products limit was reaches, sleep and try again
                 sleep(self.republish_wait_time)
-                # curr_time = curr_time + self.republish_wait_time
-                # print('n am putut adauga')
-                # print(curr_time)
             else:
-                sleep(wait_time)
-                # print("am putut")
-                # print('cantitate', quantity)
-                # if curr_time < wait_time:
-                #     # print('trebuie sa ma culc', wait_time - curr_time)
-                #     sleep(wait_time - curr_time)
-                wait_time = self.products[i][2]
-                # curr_time = 0
+                # If whole quantity was added, move to the next product
                 if quantity == 0:
                     i = i + 1
                     if i == len(self.products):
@@ -70,4 +57,7 @@ class Producer(Thread):
                     quantity = self.products[i][1]
                 else:
                     quantity = quantity - 1
-
+                # Sleep after publishing product
+                sleep(wait_time)
+                # Update wait time
+                wait_time = self.products[i][2]
