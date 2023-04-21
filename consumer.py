@@ -6,7 +6,7 @@ Assignment 1
 March 2021
 """
 
-from threading import Thread, Lock
+from threading import Thread
 from time import sleep
 
 
@@ -41,12 +41,12 @@ class Consumer(Thread):
 
     def run(self):
         # Iterate through carts
-        for i in range(len(self.carts)):
+        for cart in self.carts:
             # Iterate through commands
-            for j in range(len(self.carts[i])):
-                command = self.carts[i][j]['type']
-                product = self.carts[i][j]['product']
-                quantity = self.carts[i][j]['quantity']
+            for elem in cart:
+                command = elem['type']
+                product = elem['product']
+                quantity = elem['quantity']
                 if command == 'add':
                     while quantity > 0:
                         verify = self.marketplace.add_to_cart(self.cart_id, product)

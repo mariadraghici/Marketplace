@@ -37,14 +37,14 @@ class Producer(Thread):
         self.marketplace = marketplace
         self.republish_wait_time = republish_wait_time
         self.kwargs = kwargs
-        self.id = marketplace.register_producer()
+        self.producer_id = marketplace.register_producer()
 
     def run(self):
         i = 0
         wait_time = self.products[i][2]
         quantity = self.products[i][1]
         while 1:
-            verify = self.marketplace.publish(self.id, self.products[i][0])
+            verify = self.marketplace.publish(self.producer_id, self.products[i][0])
             if not verify:
                 # If products limit was reaches, sleep and try again
                 sleep(self.republish_wait_time)

@@ -9,7 +9,7 @@ import time
 import unittest
 from threading import Lock
 import logging
-import logging.handlers as handlers
+from logging import handlers
 
 # Create a formatter for the log messages
 time_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
@@ -86,16 +86,14 @@ class Marketplace:
             self.producers[producer_id] = 1
         else:
             self.producers[producer_id] = self.producers[producer_id] + 1
-        self.semaphore.acquire()
         # Add the product to products
-        if product not in self.products:
-            self.products[product] = {'quantity': 1, 'available': 1, 'producers': [producer_id]}
-            self.semaphore.release()
-        else:
-            self.products[product]['quantity'] = self.products[product]['quantity'] + 1
-            self.products[product]['available'] = self.products[product]['available'] + 1
-            self.semaphore.release()
-            self.products[product]['producers'].append(producer_id)
+        with self.semaphore:
+            if product not in self.products:
+                self.products[product] = {'quantity': 1, 'available': 1, 'producers': [producer_id]}
+            else:
+                self.products[product]['quantity'] = self.products[product]['quantity'] + 1
+                self.products[product]['available'] = self.products[product]['available'] + 1
+                self.products[product]['producers'].append(producer_id)
         logging.info("published done")
         return True
 
@@ -126,23 +124,21 @@ class Marketplace:
         :returns True or False. If the caller receives False, it should wait and then try again
         """
         logging.info("adding product %s to cart %d", str(product), cart_id)
-        self.semaphore.acquire()
-        if product in self.products:
-            # If there is still at least one product
-            if self.products[product]['available'] >= 1:
-                # Add product to cart
-                self.carts[cart_id].append([product, self.products[product]['producers'][0]])
-                # Decrease by 1 the number of available products of this type
-                self.products[product]['available'] = self.products[product]['available'] - 1
-                # Update the list of producers for this product type
-                self.products[product]['producers'].pop(0)
-                self.semaphore.release()
-                logging.info("product was added to the cart")
-                return True
-        self.semaphore.release()
-        logging.info("product could not be added to the cart")
-        # If the product has not been produced or is not available return False
-        return False
+        with self.semaphore:
+            if product in self.products:
+                # If there is still at least one product
+                if self.products[product]['available'] >= 1:
+                    # Add product to cart
+                    self.carts[cart_id].append([product, self.products[product]['producers'][0]])
+                    # Decrease by 1 the number of available products of this type
+                    self.products[product]['available'] = self.products[product]['available'] - 1
+                    # Update the list of producers for this product type
+                    self.products[product]['producers'].pop(0)
+                    logging.info("product was added to the cart")
+                    return True
+            logging.info("product could not be added to the cart")
+            # If the product has not been produced or is not available return False
+            return False
 
     def remove_from_cart(self, cart_id, product):
         """
@@ -155,25 +151,26 @@ class Marketplace:
         :param product: the product to remove from cart
         """
         logging.info("removing product %s from cart %d", str(product), cart_id)
-        self.semaphore.acquire()
-        index = -1
-        producer_id = 0
-        # Search for the list with that type of product
-        for i in range(len(self.carts[cart_id])):
-            if product == self.carts[cart_id][i][0]:
-                # Save producer
-                producer_id = self.carts[cart_id][i][1]
-                # Save index
-                index = i
-                break
+        with self.semaphore:
+            index = -1
+            i = 0
+            producer_id = 0
+            # Search for the list with that type of product
+            for elem in self.carts[cart_id]:
+                if product == elem[0]:
+                    # Save producer
+                    producer_id = elem[1]
+                    # Save index
+                    index = i
+                    break
+                i = i + 1
 
-        if index != -1:
-            # Remove product from cart
-            self.carts[cart_id].pop(index)
-            # Update available quantity and producers list for that type of product
-            self.products[product]['available'] = self.products[product]['available'] + 1
-            self.products[product]['producers'].append(producer_id)
-        self.semaphore.release()
+            if index != -1:
+                # Remove product from cart
+                self.carts[cart_id].pop(index)
+                # Update available quantity and producers list for that type of product
+                self.products[product]['available'] = self.products[product]['available'] + 1
+                self.products[product]['producers'].append(producer_id)
         logging.info("product was removed from the cart")
 
     def place_order(self, cart_id):
@@ -188,59 +185,80 @@ class Marketplace:
         if len(self.carts[cart_id]) == 0:
             return []
         # Iterate through products in cart
-        for i in range(len(self.carts[cart_id])):
-            product = self.carts[cart_id][i][0]
-            self.semaphore.acquire()
-            # Decrease with 1 total quantity for this type of product
-            self.products[product]['quantity'] = self.products[product]['quantity'] - 1
-            producer_id = self.carts[cart_id][i][1]
-            # Decrease number of products the producer published
-            self.producers[producer_id] = self.producers[producer_id] - 1
-            self.semaphore.release()
+        for elem in self.carts[cart_id]:
+            product = elem[0]
+            with self.semaphore:
+                # Decrease with 1 total quantity for this type of product
+                self.products[product]['quantity'] = self.products[product]['quantity'] - 1
+                producer_id = elem[1]
+                # Decrease number of products the producer published
+                self.producers[producer_id] = self.producers[producer_id] - 1
         logging.info("ordered placed successfully")
         # Return cart
         return self.carts[cart_id]
 
-    def lock_consumer(self):
-        self.consumer.acquire()
-
-    def unlock_consumer(self):
-        self.consumer.release()
+    def get_lock_consumer(self):
+        """
+        Return consumer lock
+        """
+        return self.consumer
 
 
 class TestMarketplace(unittest.TestCase):
+    """
+    Unittest for marketplace
+    """
     def setUp(self):
+        """
+        Set up function
+        """
         self.marketplace = Marketplace(10)
 
     def test_register_producer(self):
+        """
+        Test register_producer() function
+        """
         for producer_id in range(10):
             self.assertEqual(self.marketplace.register_producer(), str(producer_id),
                              'test_register_producer: producer_id incorrect')
 
     def test_publish(self):
+        """
+        Test publish() function
+        """
         products = ['tea', 'chocolate', 'strawberry', 'milk']
         for producer_id in range(3):
             self.assertEqual(self.marketplace.register_producer(), str(producer_id))
 
         for producer_id in range(3):
-            for i in range(10):
-                self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]), True,
-                                 'test_publish incorrect: product should have been added to marketplace')
-            self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]), False,
-                             'test_publish incorrect: product should NOT have been added to marketplace')
+            for _ in range(10):
+                self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]),
+                                 True,
+                                 'test_publish incorrect: product should have been added')
+            self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]),
+                             False,
+                             'test_publish incorrect: product should NOT have been added')
 
     def test_new_cart(self):
+        """
+        Test new_cart() function
+        """
         for cart_id in range(10):
-            self.assertEqual(self.marketplace.new_cart(), cart_id, 'test_new_cart: cart_id incorrect')
+            self.assertEqual(self.marketplace.new_cart(), cart_id,
+                             'test_new_cart: cart_id incorrect')
 
     def test_add_to_cart(self):
+        """
+        Test add_to_cart(cart_id, product) function
+        """
         products = ['tea', 'chocolate', 'strawberry', 'milk']
         for producer_id in range(3):
             self.assertEqual(self.marketplace.register_producer(), str(producer_id))
 
         for producer_id in range(3):
-            for i in range(5):
-                self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]), True)
+            for _ in range(5):
+                self.assertEqual(self.marketplace.publish(str(producer_id),
+                                                          products[producer_id]), True)
 
         self.assertEqual(self.marketplace.publish(str(0), products[3]), True)
         for cart_id in range(2):
@@ -251,31 +269,35 @@ class TestMarketplace(unittest.TestCase):
         self.assertEqual(self.marketplace.add_to_cart(1, 'milk'), False,
                          'test_add_to_cart: product should NOT have been added to cart')
 
-        for i in range(3):
+        for _ in range(3):
             self.assertEqual(self.marketplace.add_to_cart(0, products[0]), True,
                              'test_add_to_cart: product should have been added to cart')
-        for i in range(2):
+        for _ in range(2):
             self.assertEqual(self.marketplace.add_to_cart(1, products[0]), True,
                              'test_add_to_cart: product should have been added to cart')
         self.assertEqual(self.marketplace.add_to_cart(1, products[0]), False,
                          'test_add_to_cart: product should NOT have been added to cart')
 
     def test_remove_from_cart(self):
+        """
+        Test remove_from_cart(cart_id, product) function
+        """
         products = ['tea', 'chocolate', 'strawberry', 'milk']
         for producer_id in range(3):
             self.assertEqual(self.marketplace.register_producer(), str(producer_id))
 
         for producer_id in range(3):
-            for i in range(5):
-                self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]), True)
+            for _ in range(5):
+                self.assertEqual(self.marketplace.publish(str(producer_id),
+                                                          products[producer_id]), True)
 
         self.assertEqual(self.marketplace.publish(str(0), products[3]), True)
         for cart_id in range(2):
             self.assertEqual(self.marketplace.new_cart(), cart_id)
 
-        for i in range(3):
+        for _ in range(3):
             self.assertEqual(self.marketplace.add_to_cart(0, products[0]), True)
-        for i in range(5):
+        for _ in range(5):
             self.assertEqual(self.marketplace.add_to_cart(1, products[1]), True)
             self.assertEqual(self.marketplace.add_to_cart(1, products[2]), True)
 
@@ -284,22 +306,26 @@ class TestMarketplace(unittest.TestCase):
                          'test_remove_from_cart: product should have been available')
 
     def test_place_order(self):
+        """
+        Test place_ordrer() function
+        """
         products = ['tea', 'chocolate', 'strawberry', 'milk']
         for producer_id in range(3):
             self.assertEqual(self.marketplace.register_producer(), str(producer_id))
 
         for producer_id in range(3):
-            for i in range(5):
-                self.assertEqual(self.marketplace.publish(str(producer_id), products[producer_id]), True)
+            for _ in range(5):
+                self.assertEqual(self.marketplace.publish(str(producer_id),
+                                                          products[producer_id]), True)
 
         self.assertEqual(self.marketplace.publish(str(0), products[3]), True)
         for cart_id in range(2):
             self.assertEqual(self.marketplace.new_cart(), cart_id)
 
-        for i in range(3):
+        for _ in range(3):
             # cart 0: 'tea' * 3
             self.assertEqual(self.marketplace.add_to_cart(0, products[0]), True)
-        for i in range(5):
+        for _ in range(5):
             # cart 1: 'chocolate' * 5, 'strawberry' * 5
             self.assertEqual(self.marketplace.add_to_cart(1, products[1]), True)
             self.assertEqual(self.marketplace.add_to_cart(1, products[2]), True)
